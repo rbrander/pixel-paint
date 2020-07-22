@@ -43,8 +43,6 @@ class ColourButton {
   }
 }
 
-
-let pixelatedFont
 let backgroundCanvas
 const state = {
   mouse: { x: undefined, y: undefined, isDown: false, wasDown: false },
