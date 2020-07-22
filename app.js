@@ -5,7 +5,7 @@ const ctx = canvas.getContext('2d')
 const PIXEL_BOX_SIZE = 15 // pixels
 const LEFT_OFFSET = 100 // pixels from the left edge
 const TOP_OFFSET = 50 // pixels from the top edge
-const BACKGROUND_COLOUR = 'black' // '#191919' // almost black, but not quite, so you can see black as a pixel colour
+const BACKGROUND_COLOUR = '#191919' // almost black, but not quite, so you can see black as a pixel colour
 const BORDER_COLOUR = '#CCCCCC' // used around colour selection boxes and pixels
 const COLOURS = {
   'aqua': '#00FFFF',
