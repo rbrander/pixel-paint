@@ -197,7 +197,9 @@ const loop = (tick) => {
 }
 
 const createBackgroundImageData = (width, height) => {
-  const canvas = new OffscreenCanvas(width, height)
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
   const ctx = canvas.getContext('2d')
   const size = 5
   for (let x = 0; x < width; x += size) {
