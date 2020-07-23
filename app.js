@@ -64,42 +64,46 @@ const gridPositionToCanvasPosition = (gridX, gridY) => {
 }
 
 const update = (tick) => {
+  const { mouse, colourButtons, pixels } = state
+
   // handle the mouse click
-  const mouseClicked = state.mouse.wasDown && !state.mouse.isDown
-  const { x: mouseX, y: mouseY } = state.mouse
+  const mouseClicked = mouse.wasDown && !mouse.isDown
   if (mouseClicked) {
     // check if click is in the left panel
-    if (mouseX < LEFT_OFFSET && mouseY > TOP_OFFSET) {
+    if (mouse.x < LEFT_OFFSET && mouse.y > TOP_OFFSET) {
       // left panel
       // since the only thing currently in the left panel is the colour
       // selectors, check if a colour selector was hit
-      const hitColourButton = state.colourButtons.find(
+      const hitColourButton = colourButtons.find(
         ({ x, y, width, height }) => (
-          mouseX >= x &&
-          mouseY >= y &&
-          mouseX <= x + width && 
-          mouseY <= y + height
+          mouse.x >= x &&
+          mouse.y >= y &&
+          mouse.x <= x + width &&
+          mouse.y <= y + height
         )
       )
       if (hitColourButton instanceof ColourButton) {
-        console.log(`You selected ${hitColourButton.colourName}`)
         state.selectedColour = hitColourButton.colourName
       }
     }
   }
   
   // Check if mouse is down in the drawing area
-  if (state.mouse.isDown && mouseX > LEFT_OFFSET && mouseY > TOP_OFFSET) {
+  if (mouse.isDown && mouse.x > LEFT_OFFSET && mouse.y > TOP_OFFSET) {
     // drawing area
-    const [gridX, gridY] = canvasPositionToGridPosition(mouseX, mouseY)
-    const hasPixelPosition = state.pixels.some(({ x, y }) => x === gridX && y === gridY)
-    if (!hasPixelPosition && gridX >= 0 && gridY >= 0) {
+    const [gridX, gridY] = canvasPositionToGridPosition(mouse.x, mouse.y)
+    const matchingPixel = pixels.find(({ x, y }) => x === gridX && y === gridY)
+    const hasPixel = matchingPixel !== undefined
+    if (hasPixel) {
+      // update the colour to the selected colour
+      matchingPixel.colour = COLOURS[state.selectedColour]
+    } else if (gridX >= 0 && gridY >= 0) {
       const pixel = new Pixel(gridX, gridY, COLOURS[state.selectedColour])
-      state.pixels.push(pixel)
+      pixels.push(pixel)
     }
   }    
 
-  state.mouse.wasDown = state.mouse.isDown
+  mouse.wasDown = mouse.isDown
 }
 
 const draw = (tick) => {
@@ -136,6 +140,28 @@ const draw = (tick) => {
   ctx.lineTo(LEFT_OFFSET, TOP_OFFSET)
   ctx.lineTo(LEFT_OFFSET, canvas.height)
   ctx.stroke()
+
+  // draw the preview window
+  const previewWindowScale = 2 // each pixel is doubled in size
+  const previewWindowHeight = ((canvas.height - TOP_OFFSET) / PIXEL_BOX_SIZE) * previewWindowScale
+  const previewWindowWidth = ((canvas.width - LEFT_OFFSET) / PIXEL_BOX_SIZE) * previewWindowScale
+  const previewWindowMargin = TOP_OFFSET * 0.2 // ~20% seems good enough
+  const previewWindowTop = TOP_OFFSET + previewWindowMargin
+  const previewWindowLeft = canvas.width - previewWindowWidth - previewWindowMargin
+  ctx.fillStyle = BACKGROUND_COLOUR
+  ctx.fillRect(previewWindowLeft-1, previewWindowTop-1, previewWindowWidth+2, previewWindowHeight+2)
+  ctx.strokeStyle = BORDER_COLOUR
+  ctx.strokeRect(previewWindowLeft-1, previewWindowTop-1, previewWindowWidth+2, previewWindowHeight+2)
+  // iterate over the pixels and draw them in the preview window
+  pixels.forEach(({ x, y, colour }) => {
+    ctx.fillStyle = colour
+    ctx.fillRect(
+      previewWindowLeft + (x * previewWindowScale),
+      previewWindowTop + (y * previewWindowScale),
+      previewWindowScale,
+      previewWindowScale
+    )
+  })
 
   // draw the colour selectors
   ctx.lineWidth = 2
