@@ -8,6 +8,7 @@ const TOP_OFFSET = 50 // pixels from the top edge
 const BACKGROUND_COLOUR = '#191919' // almost black, but not quite, so you can see black as a pixel colour
 const BORDER_COLOUR = '#CCCCCC' // used around colour selection boxes and pixels
 const COLOURS = {
+  'pastelblue': '#1E90FF',
   'aqua': '#00FFFF',
   'black': '#000000',
   'fuchsia': '#FF00FF',
@@ -20,7 +21,6 @@ const COLOURS = {
   'silver': '#C0C0C0',
   'teal': '#008080',
   'yellow': '#FFFF00'
-// pastel blue #1E90FF
 }
 
 
@@ -43,10 +43,10 @@ class ColourButton {
   }
 }
 
-let backgroundCanvas
 const state = {
+  backgroundImageData: undefined,
   mouse: { x: undefined, y: undefined, isDown: false, wasDown: false },
-  selectedColour: 'aqua',
+  selectedColour: 'pastelblue',
   colourButtons: [],
   pixels: []
 }
@@ -103,34 +103,25 @@ const update = (tick) => {
 }
 
 const draw = (tick) => {
+  const { pixels, backgroundImageData, colourButtons, selectedColour } = state
+
+  // shift the pixels to make lines crisp (remove anti-aliasing)
   ctx.translate(0.5,0.5)
+
   // clear the background
   ctx.fillStyle = BACKGROUND_COLOUR
   ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-  // draw a background
-  // this takes too long (~20ms), so need to use an offscreen canvas to copy
-  // const start = Date.now()
-  const backgroundImageData = backgroundCanvas
-    .getContext('2d')
-    .getImageData(0, 0, canvas.width - LEFT_OFFSET, canvas.height - TOP_OFFSET)
-  ctx.putImageData(backgroundImageData, LEFT_OFFSET, TOP_OFFSET);
-  // console.log('took', Date.now() - start, 'ms')
-  /*
-  const size = 5
-  for (let x = LEFT_OFFSET; x < canvas.width; x += size) {
-    for (let y = TOP_OFFSET; y < canvas.height; y += size) {
-      const isEven = ((x / size) + (y / size)) % 2 === 0
-      ctx.fillStyle = isEven ? '#222' : '#111'
-      ctx.fillRect(x, y, size, size)
-    }
-  }*/
-
+  // draw a background using an offscreen canvas for speed
+  if (backgroundImageData !== undefined) {
+    ctx.putImageData(backgroundImageData, LEFT_OFFSET, TOP_OFFSET)
+  }
 
   // draw boxes for each of the pixels
-  if (state.pixels.length > 0) {
+  ctx.lineWidth = 1
+  if (pixels.length > 0) {
     ctx.strokeStyle = BORDER_COLOUR
-    state.pixels.forEach(({ x, y, colour }) => {
+    pixels.forEach(({ x, y, colour }) => {
       const [canvasX, canvasY] = gridPositionToCanvasPosition(x, y)
       ctx.fillStyle = colour
       ctx.fillRect(canvasX, canvasY, PIXEL_BOX_SIZE, PIXEL_BOX_SIZE)
@@ -147,20 +138,29 @@ const draw = (tick) => {
   ctx.stroke()
 
   // draw the colour selectors
-  state.colourButtons.forEach(({ x, y, width, height, colourValue }) => {
+  ctx.lineWidth = 2
+  colourButtons.forEach(({ x, y, width, height, colourValue, colourName }) => {
     ctx.fillStyle = colourValue
     ctx.fillRect(x, y, width, height)
     ctx.strokeStyle = BORDER_COLOUR
     ctx.strokeRect(x, y, width, height)
+    if (colourName === selectedColour) {
+      // draw a yellow border around to show it is selected
+      ctx.strokeStyle = 'yellow'
+      const padding = 4
+      ctx.strokeRect(x - padding, y - padding, width + padding * 2, height + padding * 2)
+    }
   })
 
   // draw the title
+  const fontSize = 40 // pixels
   ctx.textBaseline = 'bottom'
   ctx.textAlign = 'center'
-  ctx.font = '40px Pixelated'
+  ctx.font = `${fontSize}px Pixelated`
   ctx.fillStyle = '#1E90FF'
-  ctx.fillText('Pixel Paint', canvas.width / 2, 40)
+  ctx.fillText('Pixel Paint', canvas.width / 2, fontSize)
 
+  // shift the pixels to make lines crisp (remove anti-aliasing)
   ctx.translate(-0.5,-0.5)
 }
 
@@ -170,7 +170,7 @@ const loop = (tick) => {
   requestAnimationFrame(loop)
 }
 
-const createNewBackgroundCanvas = (width, height) => {
+const createBackgroundImageData = (width, height) => {
   const canvas = new OffscreenCanvas(width, height)
   const ctx = canvas.getContext('2d')
   const size = 5
@@ -181,13 +181,13 @@ const createNewBackgroundCanvas = (width, height) => {
       ctx.fillRect(x, y, size, size)
     }
   }
-  return canvas
+  return ctx.getImageData(0, 0, canvas.width - LEFT_OFFSET, canvas.height - TOP_OFFSET)
 }
 
 const resize = () => {
   canvas.width = window.innerWidth
   canvas.height = window.innerHeight
-  backgroundCanvas = createNewBackgroundCanvas(canvas.width, canvas.height)
+  state.backgroundImageData = createBackgroundImageData(canvas.width, canvas.height)
 }
 
 const mouseMove = (e) => {
