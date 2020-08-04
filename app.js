@@ -2,6 +2,7 @@
 const canvas = document.getElementById('canvas')
 const ctx = canvas.getContext('2d')
 
+const HEXIDECIMAL_RADIX = 16 // values per digit (0-9,a-f)
 const PIXEL_BOX_SIZE = 15 // pixels
 const LEFT_OFFSET = 100 // pixels from the left edge
 const TOP_OFFSET = 50 // pixels from the top edge
@@ -23,23 +24,108 @@ const COLOURS = {
   'yellow': '#FFFF00'
 }
 
-
 class Pixel {
   constructor(x, y, colour) {
     this.x = x
     this.y = y
     this.colour = colour
   }
+
+  // converts this.colour (hex colour) to array of 3 values: red, green, blue
+  getRGB() {
+    const colours = new Array(3).fill(0)
+    if (typeof this.colour === 'string'
+      && this.colour[0] === '#'
+      && this.colour.length === 7 // 2 hex chars per colour, and a hash
+    ) {
+      colours[0] = parseInt(this.colour[1] + this.colour[2], HEXIDECIMAL_RADIX)
+      colours[1] = parseInt(this.colour[3] + this.colour[4], HEXIDECIMAL_RADIX)
+      colours[2] = parseInt(this.colour[5] + this.colour[6], HEXIDECIMAL_RADIX)
+    }
+    return colours
+  }
 }
 
-class ColourButton {
-  constructor(colourName, colourValue, x, y, width, height) {
-    this.colourName = colourName
-    this.colourValue = colourValue
+class Button {
+  constructor(x, y, width, height) {
     this.x = x
     this.y = y
     this.width = width
     this.height = height
+  }
+
+  // returns boolean indicating if x,y provided lands within button area
+  isInBounds(x, y) {
+    return (x >= this.x && y >= this.y)
+      && (x < this.x + this.width && y < this.y + this.height)
+  }
+
+  draw(ctx) {
+    ctx.fillStyle = 'white'
+    ctx.fillRect(this.x, this.y, this.width, this.height)
+  }
+
+  onClick() {
+    console.log('Click!')
+  }
+}
+
+class ColourButton extends Button {
+  constructor(colourName, colourValue, x, y, width, height) {
+    super(x, y, width, height)
+    this.colourName = colourName
+    this.colourValue = colourValue
+  }
+
+  draw(ctx, isSelected) {
+    ctx.fillStyle = this.colourValue
+    ctx.fillRect(this.x, this.y, this.width, this.height)
+    ctx.strokeStyle = BORDER_COLOUR
+    ctx.strokeRect(this.x, this.y, this.width, this.height)
+    if (isSelected) {
+      // draw a yellow border around to show it is selected
+      ctx.strokeStyle = 'yellow'
+      const padding = 4
+      ctx.strokeRect(
+        this.x - padding,
+        this.y - padding,
+        this.width + padding * 2,
+        this.height + padding * 2
+      )
+    }
+  }
+
+  onClick() {
+    state.selectedColour = this.colourName
+  }
+}
+
+class SaveButton extends Button {
+  constructor(x, y, width, height, iconImage, iconSize) {
+    super(x, y, width, height)
+    if (iconImage instanceof Image) {
+      this.iconImage = iconImage
+    } else {
+      throw Error('Invalid iconImage; must be an Image type')
+    }
+    if (typeof iconSize === 'number' && iconSize > 0 && iconSize <= width) {
+      this.iconSize = iconSize
+    } else {
+      throw Error('Invalid iconSize; must be a number between 0 and width')
+    }
+  }
+
+  draw(ctx) {
+    super.draw(ctx) // draw a white box using button dimensions
+    if (this.iconImage instanceof Image) {
+      const imageOffsetX = 2
+      const imageOffsetY = 1
+      ctx.drawImage(this.iconImage, this.x + imageOffsetX, this.y + imageOffsetY, this.iconSize, this.iconSize)
+    }
+  }
+
+  onClick() {
+    saveImage()
   }
 }
 
@@ -64,27 +150,17 @@ const gridPositionToCanvasPosition = (gridX, gridY) => {
 }
 
 const update = (tick) => {
-  const { mouse, colourButtons, pixels } = state
+  const { mouse, colourButtons, saveButton, pixels } = state
 
   // handle the mouse click
   const mouseClicked = mouse.wasDown && !mouse.isDown
   if (mouseClicked) {
     // check if click is in the left panel
     if (mouse.x < LEFT_OFFSET && mouse.y > TOP_OFFSET) {
-      // left panel
-      // since the only thing currently in the left panel is the colour
-      // selectors, check if a colour selector was hit
-      const hitColourButton = colourButtons.find(
-        ({ x, y, width, height }) => (
-          mouse.x >= x &&
-          mouse.y >= y &&
-          mouse.x <= x + width &&
-          mouse.y <= y + height
-        )
-      )
-      if (hitColourButton instanceof ColourButton) {
-        state.selectedColour = hitColourButton.colourName
-      }
+      // left panel: check if a button was hit
+      [...colourButtons, saveButton]
+        .filter(button => button.isInBounds(mouse.x, mouse.y))
+        .forEach(button => button.onClick())
     }
   }
   
@@ -165,18 +241,22 @@ const draw = (tick) => {
 
   // draw the colour selectors
   ctx.lineWidth = 2
-  colourButtons.forEach(({ x, y, width, height, colourValue, colourName }) => {
-    ctx.fillStyle = colourValue
-    ctx.fillRect(x, y, width, height)
-    ctx.strokeStyle = BORDER_COLOUR
-    ctx.strokeRect(x, y, width, height)
-    if (colourName === selectedColour) {
-      // draw a yellow border around to show it is selected
-      ctx.strokeStyle = 'yellow'
-      const padding = 4
-      ctx.strokeRect(x - padding, y - padding, width + padding * 2, height + padding * 2)
-    }
+  colourButtons.forEach(colourButton => {
+    colourButton.draw(ctx, colourButton.colourName === selectedColour)
   })
+
+  // draw a dividing line just below the last colour box
+  const lastColourButton = colourButtons[colourButtons.length - 1]
+  ctx.strokeStyle = BORDER_COLOUR
+  const dividerMargin = 20 // pixels
+  const dividerY = lastColourButton.y  + lastColourButton.height + dividerMargin
+  ctx.beginPath()
+  ctx.moveTo(dividerMargin, dividerY)
+  ctx.lineTo(LEFT_OFFSET - dividerMargin, dividerY)
+  ctx.stroke()
+
+  // draw the save icon
+  state.saveButton.draw(ctx)
 
   // draw the title
   const fontSize = 40 // pixels
@@ -218,6 +298,7 @@ const resize = () => {
   state.backgroundImageData = createBackgroundImageData(canvas.width, canvas.height)
 }
 
+// Mouse event handlers
 const mouseMove = (e) => {
   Object.assign(state.mouse, { x: e.clientX, y: e.clientY })
 }
@@ -226,6 +307,39 @@ const mouseUp = (e) => {
 }
 const mouseDown = (e) => {
   state.mouse.isDown = true
+}
+
+const saveImage = () => {
+  // create a new canvas with only the pixels we have in state
+  const { pixels } = state
+  const imageWidth = Math.max(0, ...pixels.map(pixel => pixel.x)) + 1
+  const imageHeight = Math.max(0, ...pixels.map(pixel => pixel.y)) + 1
+
+  // Create a new canvas to paint on, appending to the body to ensure it works on most browsers  
+  const imageCanvas = document.createElement('canvas')
+  imageCanvas.width = imageWidth
+  imageCanvas.height = imageHeight
+  document.body.appendChild(imageCanvas)
+  const imageContext = imageCanvas.getContext('2d')
+
+  // imageData is an object with a 'data' property as a Uint8ClampedArray storing RGBA values (0-255) for each pixel
+  const imageData = ctx.createImageData(imageWidth, imageHeight)
+  pixels.forEach(pixel => {
+    const [red, green, blue] = pixel.getRGB()
+    const offset = (pixel.y * imageWidth + pixel.x) * 4 // 4 values for each pixel: RGBA
+    imageData.data[offset] = red
+    imageData.data[offset + 1] = green
+    imageData.data[offset + 2] = blue
+    imageData.data[offset + 3] = 255 // max alpha value
+  })
+  imageContext.putImageData(imageData, 0, 0)
+
+  // For best compatibility, a link is created and added to the document.
+  // This allows the use of canvas.toDataURL() to set the link href for download
+  const link = document.createElement('a')
+  link.download = `Pixel Paint Image - ${new Date().toUTCString()}.png`
+  link.href = imageCanvas.toDataURL('image/png')
+  link.click()
 }
 
 const init = () => {
@@ -257,6 +371,17 @@ const init = () => {
     const y = row * columnWidth + padding + TOP_OFFSET
     return new ColourButton(colourName, COLOURS[colourName], x, y, boxSize, boxSize)
   })
+
+  // Create the save button, just below the divider
+  const dividerMargin = 20 // pixels
+  const lastColourButton = state.colourButtons[state.colourButtons.length - 1]
+  const saveButtonY = lastColourButton.y  + lastColourButton.height + dividerMargin * 2
+  const saveButtonX = state.colourButtons[0].x
+  const saveButtonIconImage = document.getElementById('save-icon')
+  const saveButtonIconImageSize = 25 // pixels, actual is 52 pixels
+  const saveButtonWidth = saveButtonIconImageSize + 5
+  const saveButtonHeight = saveButtonIconImageSize + 4
+  state.saveButton = new SaveButton(saveButtonX, saveButtonY, saveButtonWidth, saveButtonHeight, saveButtonIconImage, saveButtonIconImageSize)
 
   requestAnimationFrame(loop)
 }
